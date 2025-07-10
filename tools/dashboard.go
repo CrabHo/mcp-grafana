@@ -28,20 +28,27 @@ type UpdateDashboardParams struct {
 	Dashboard map[string]interface{} `json:"dashboard" jsonschema:"required,description=The full dashboard JSON"`
 	FolderUID string                 `json:"folderUid" jsonschema:"optional,description=The UID of the dashboard's folder"`
 	Message   string                 `json:"message" jsonschema:"optional,description=Set a commit message for the version history"`
-	Overwrite bool                   `json:"overwrite" jsonschema:"optional,description=Overwrite the dashboard if it exists. Otherwise create one"`
 	UserID    int64                  `json:"userId" jsonschema:"optional,ID of the user making the change"`
+}
+
+func createDashboard(ctx context.Context, args UpdateDashboardParams) (*models.PostDashboardOKBody, error) {
+	return createOrUpdateDashboard(ctx, args, false)
+}
+
+func updateDashboard(ctx context.Context, args UpdateDashboardParams) (*models.PostDashboardOKBody, error) {
+	return createOrUpdateDashboard(ctx, args, true)
 }
 
 // updateDashboard can be used to save an existing dashboard, or create a new one.
 // DISCLAIMER: Large-sized dashboard JSON can exhaust context windows. We will
 // implement features that address this in https://github.com/grafana/mcp-grafana/issues/101.
-func updateDashboard(ctx context.Context, args UpdateDashboardParams) (*models.PostDashboardOKBody, error) {
+func createOrUpdateDashboard(ctx context.Context, args UpdateDashboardParams, isUpdate bool) (*models.PostDashboardOKBody, error) {
 	c := mcpgrafana.GrafanaClientFromContext(ctx)
 	cmd := &models.SaveDashboardCommand{
 		Dashboard: args.Dashboard,
 		FolderUID: args.FolderUID,
 		Message:   args.Message,
-		Overwrite: args.Overwrite,
+		Overwrite: isUpdate,
 		UserID:    args.UserID,
 	}
 	dashboard, err := c.Dashboards.PostDashboard(cmd)
@@ -60,11 +67,19 @@ var GetDashboardByUID = mcpgrafana.MustTool(
 	mcp.WithReadOnlyHintAnnotation(true),
 )
 
+var CreateDashboard = mcpgrafana.MustTool(
+	"create_dashboard",
+	"Create a dashboard",
+	createDashboard,
+	mcp.WithTitleAnnotation("Create dashboard"),
+	mcp.WithDestructiveHintAnnotation(true),
+)
+
 var UpdateDashboard = mcpgrafana.MustTool(
 	"update_dashboard",
-	"Create or update a dashboard",
+	"update a dashboard",
 	updateDashboard,
-	mcp.WithTitleAnnotation("Create or update dashboard"),
+	mcp.WithTitleAnnotation("Update dashboard"),
 	mcp.WithDestructiveHintAnnotation(true),
 )
 
@@ -153,6 +168,7 @@ var GetDashboardPanelQueries = mcpgrafana.MustTool(
 
 func AddDashboardTools(mcp *server.MCPServer) {
 	GetDashboardByUID.Register(mcp)
+	CreateDashboard.Register(mcp)
 	UpdateDashboard.Register(mcp)
 	GetDashboardPanelQueries.Register(mcp)
 }
